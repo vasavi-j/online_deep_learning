@@ -1,233 +1,172 @@
-# Homework 2
+# Homework 3
 
-In this homework, we will train **deep networks** to classify images from *SuperTuxKart*.
+In this homework, we will explore Convolution Networks in core computer vision tasks:
+- Classification
+- Segmentation
+- Detection
 
-<img src="./viz.png" width="400">
-
-This homework will require a GPU - if you don't have access to one, you can use Google Colab.
-
-We have provided some additional instructions in this [starter colab notebook](https://colab.research.google.com/drive/1k-OTy-eM7BDHqOrRyM9yTeLFvqdjpzvd)
+You will need to use a GPU or [Google Colab](https://colab.research.google.com/) to train your models.
 
 ## Setup + Starter Code
 
-The starter code contains a `data` directory where you'll copy (or symlink) the [SuperTuxKart Classification Dataset](https://www.cs.utexas.edu/~bzhou/dl_class/classification_data.zip).
-Unzip the data directly into the homework folder, replacing the existing data directory completely.
+In this assignment, we'll be working with two datasets:
+- [SuperTuxKart Classification Dataset](https://www.cs.utexas.edu/~bzhou/dl_class/classification_data.zip) for classification
+- [SuperTuxKart Drive Dataset](https://www.cs.utexas.edu/~bzhou/dl_class/drive_data.zip) for segmentation and detection
+
+You can download the datasets by running the following command from the main directory:
+```bash
+curl -s -L https://www.cs.utexas.edu/~bzhou/dl_class/classification_data.zip -o ./classification_data.zip && unzip -qo classification_data.zip
+curl -s -L https://www.cs.utexas.edu/~bzhou/dl_class/drive_data.zip -o ./drive_data.zip && unzip -qo drive_data.zip
+```
 
 Make sure you see the following directories and files inside your main directory
 ```
-homework/
-grader/
 bundle.py
-classification_data/train
-classification_data/val
+homework
+grader
+classification_data
+drive_data
 ```
 You will run all scripts from inside this main directory.
 
-In the `homework` directory, you'll find the following starter code files
-- `train.py` - code to train, evaluate and save your models
+In the `homework` directory, you'll find the following:
 - `models.py` - where you will implement various models
-- `logger.py` - utility functions to log your model's performance using Tensorboard
-- `utils.py` - data loader for the SuperTuxKart dataset
+- `metrics.py` - metrics to evaluate your models
+- `datasets` - contains dataset loading and transformation functions
 
-### Data Loader
+## Training
 
-In `utils.py` we have provided a data loader for the SuperTuxKart dataset.
-Labels and the corresponding image paths are saved in `labels.csv` and there are 6 classes of objects.
-In our setting, the label `background` corresponds to 0, `kart` is 1, `pickup` is 2, `nitro` is 3, `bomb` is 4 and `projectile` 5.
+This time, you'll implement the training code from scratch!
+Note that this homework consists of two parts, so we suggest splitting your training code into two parts:
+* `train_classification.py` - part 1
+* `train_detection.py` - part 2
 
-Take a look at the `SuperTuxDataset` class and the `__init__`, `__len__`, and the `__getitem__` functions, as this demonstrates how to load and preprocess data for classification tasks.
-- `__init__` reads the csv file and stores the image paths and labels.
-- `__len__` returns the size of the dataset.
-- `__getitem__` returns a tuple of image, label where image is a `torch.Tensor` of size `(3,64,64)` with range `[0,1]`, and the label is an `int`.
+The previous homework should be a good reference, but feel free to modify different parts of the training code depending on how you want to perform experiments.
 
-Note: you have access to two different directories of data:
-- a training set (used to train the model)
-- a validation set (used to approximate your performance on new unseen data).
+Recall that a training pipeline includes:
+* Creating an optimizer
+* Creating a model, loss, metrics (task dependent)
+* Loading the data (task dependent)
+* Running the optimizer for several epochs
+* Logging + saving your model (use the provided `save_model`)
 
-When we grade your solution, we will use a third data split (a hidden test set).
-We split the data into three to help you prevent overfitting (a phenomenon where the network performs very well on its training data, but cannot make sense of any new data; more on this later in class).
+The metrics are provided in `metrics.py`, so no need to implement them yourself.
+You can see how to use them in `grader/tests.py`.
 
-### Local Grader Instructions
+### Grader Instructions
 
-You can grade your implementation after any part of the homework by running the following command from the main directory:
+You can grade your trained models by running the following command from the main directory:
 - `python3 -m grader homework -v` for medium verbosity
 - `python3 -m grader homework -vv` to include print statements
+- `python3 -m grader homework --disable_color` for Google Colab since colors don't show up that well
 
-## Logging (10 pts)
+## Part 1: Classification (35 points)
 
-Logging is an important part of training models and provides a way to monitor/track your experiments.
-We start by learning how to use `tensorboard`, a tool for monitoring the training of our model.
+We will start by extending the classification model from the previous homework to use convolutional layers.
 
-We created a dummy training procedure in `logger.py` and provided you an instance of a `tb.SummaryWriter`.
-Implement the rest of `test_logging`.
-Use the summary writer to log the training loss at every iteration, the training accuracy at each epoch and the validation accuracy at each epoch.
-Remember to log everything in *global training steps*.
+Implement the `Classifier` model in `models.py`.
+The `forward` function receives a `(B, 3, 64, 64)` image tensor as an input and should return a `(B, 6)` tensor of logits (one value per class), where `B` is the batch size.
 
-Here is a simple example of how to use the `SummaryWriter`.
-```python
-import torch.utils.tensorboard as tb
+The accuracy requirements for this model will be more challenging!
+To get full credit, you might need to experiment with different forms of data augmentation, a technique to artificially increase the size of your training dataset by applying various transformations to your training data.
+Data augmentation are heavily tied to the specific task  and the dataset you are working with.
+For instance, in classification, one common augmentation is to apply random horizontal flips to your images.
 
-logger = tb.SummaryWriter('cnn')
-logger.add_scalar('train/loss', t_loss, 0)
-```
-In `logger.py`, you should **not** create your own `SummaryWriter`, but rather use the one provided.
-You can test your logger by calling
-```bash
-python3 -m homework.logger --exp_dir logs
-```
-To view the logs in tensorboard,
-- Spawn a new terminal and start a tensorboard server: `tensorboard --logdir logs`.
-- Open up a web browser and navigate to the provided URL (usually `localhost:6006`).
-
-## Classification Loss (10 pts)
-
-Next, we'll implement the `ClassificationLoss` in `models.py`.
-We will later use this loss to train our classifiers.
-You should implement the log-likelihood of a softmax classifier.
-
-$$-\log\left(\frac{\exp(x_l) }{ \sum_j \exp(x_j)} \right),$$
-where $x$ are the logits and $l$ is the label.
-You may use existing PyTorch functions to implement this.
-
-### Relevant Operations
- - [torch.nn.functional](https://pytorch.org/docs/stable/nn.html#torch-nn-functional)
-
-## Linear Model (5 pts)
-
-Let's begin building our first neural network. We will build a neural network to classify different classes in SuperTuxKart dataset.
-
-Implement the `LinearClassifier` class in `models.py`.
-Define the linear model and all layers in the `__init__` function, then implement `forward`.
-Your `forward` function receives a `(B,3,64,64)` tensor as an input and should return a `(B,6)` `torch.Tensor` (one value per class), where `B` stands for batch size.
-You can earn these full credits without training the model, just from the correct model definition.
-
-You can grade your linear model using
-
-```bash
-python3 -m grader homework -v
-```
-
-### Hints/Tips
-
-- Run the grader before training your model to make sure your definition of the model is correct.
-- Use `torch.nn.Linear` to define a linear layer.
-- If you are using the VSCode debugger, you might need to temporarily set `num_workers=0` in the DataLoader so that the debugger can attach to the correct process.
-
-### Relevant Operations
- - [torch.nn.Linear](https://pytorch.org/docs/stable/nn.html#linear)
- - [torch.tensor.View](https://pytorch.org/docs/stable/tensors.html#torch.Tensor.view)
- - and all previous
-
-## Training the Linear Model (15 pts)
-
-Train your linear model in `train.py`.
-
-Complete the code for a full training procedure.
-This includes:
- * Creating a model, loss, optimizer
- * Loading the data: `train` and `val`
- * Running the optimizer for several epochs (the default `max_epochs` might not be enough)
- * Saving your final model, using `save_model`
-
-Train your network using
-```bash
-python3 -m homework.train --model_name linear
-```
-
-You can then test your trained model using
-```bash
-python3 -m grader homework -v
-```
-
-The accuracy cutoff for this section is 0.70 on the validation/test set.
-
-### Hints/Tips
-- You might find it useful to store optimization parameters in the `ArgumentParser`, and quickly try a few from the command-line.
-- Try to write your training code to be model agnostic. We will swap out the model below.
-
-We will use the model checkpoint `linear.th` to grade your trained model's performance.
-You can grade your trained model using
-```bash
-python3 -m grader homework -v
-```
-
-### Relevant Operations
- - [torch.optim.Optimizer](https://pytorch.org/docs/stable/optim.html#torch.optim.Optimizer)
- - [torch.optim.SGD](https://pytorch.org/docs/stable/optim.html#torch.optim.SGD)
- - [torch.optim.Adam](https://pytorch.org/docs/stable/optim.html#torch.optim.Adam)
- - [torch.Tensor.backward](https://pytorch.org/docs/stable/tensors.html#torch.Tensor.backward)
- - and all previous
-
-## MLP Model (20 pts)
-
-Implement the `MLPClassifier` class in `models.py`.
-The inputs and outputs to the multi-layer perceptron are the same as the linear classifier.
-However, now you're learning a non-linear function.
-
-Train your network using
-```bash
-python3 -m homework.train --model_name mlp
-```
-
-The accuracy cutoff for this section is 0.80 on the validation/test set.
-
-### Relevant Operations
-
- - [torch.nn.ReLU](https://pytorch.org/docs/stable/nn.html#relu)
- - [torch.nn.Sequential](https://pytorch.org/docs/stable/nn.html#sequential)
- - and all previous
-
-## Deep Network (15 pts)
-
-Implement the `MLPClassifierDeep` class in `models.py`.
-For this part, build a model that has at least 4 layers.
-
-You can train your network using
-```bash
-python3 -m homework.train --model_name mlp_deep
-```
+To add data augmentations, modify the `get_transform` method in `datasets/classification_datasets.py` to construct your data augmentation pipeline.
+Pass the corresponding `transform_pipeline` string to the `load_data` function.
+Remember to only apply data augmentations to the training set.
 
 The accuracy cutoff for this section is 0.80 on the validation/test set.
 
 ### Hints/Tips
-- You can use `torch.nn.Sequential` to easily build a multi-layer model.
-- This part mainly requires tuning the number of layers in your model.
-- Try to pass a `num_layers` argument to your model to tune efficiently.
-- You might need to tune your learning rate `lr` and `batch_size`.
-- You might need to tune the hidden dimension of your model ('width' of each layer)
-
-## Deep Network with Residual Connections (20 pts)
-
-Implement the `MLPClassifierDeepResidual` class in `models.py`.
-
-This time, let's try to build a model that has at least 4 layers, and with residual connections.
-Residual connections are a way to help with the vanishing gradient problem in deep networks.
-
-You can train your network using
-```bash
-python3 -m homework.train --model_name mlp_deep_residual
-```
-
-The accuracy cutoff for this section is 0.80 on the validation/test set.
-
-### Hints/Tips
-- Run the grader before training your model to make sure your residual connections are implemented properly.
-- You can use `torch.nn.ModuleList` to store your layers. This will allow you to easily iterate over the layers in your forward function.
+- Run your model on some sample data as a sanity check - do the shapes of the tensors make sense?
+- A network with just a few layers should be able to achieve a decent accuracy on this task.
+- Additional tricks like residual blocks, dropout, weight regularization can help improve performance.
+- The solution achieves 92% validation accuracy in 10 minutes of training on Colab.
+- Remember to call `model.train()` and `model.eval()` to switch between training and evaluation modes (even when using `torch.inference_mode()`).
 
 ### Relevant Operations
- - [ResNet](https://arxiv.org/abs/1512.03385)
- - [torch.nn.ModuleList](https://pytorch.org/docs/stable/generated/torch.nn.ModuleList.html#torch.nn.ModuleList)
- - and all previous
+ - [torch.nn.Conv2d](https://pytorch.org/docs/stable/nn.html#convolution-layers)
+ - [torch.nn.BatchNorm2d](https://pytorch.org/docs/stable/nn.html#normalization-layers)
+ - [torchvision.transforms.Compose](https://pytorch.org/vision/stable/generated/torchvision.transforms.Compose.html)
+ - [torchvision.transforms.HorizontalFlip](https://pytorch.org/vision/stable/generated/torchvision.transforms.RandomHorizontalFlip.html)
+
+## Part 2: Road Detection (65 points)
+
+Next, we'll focus on a more challenging and practical task: road detection.
+To do this, we'll decompose the task into two parts: depth estimation and road semantic segmentation.
+When combined, we can use the depth information to construct the 3D structure of the road for navigation!
+
+Previously we've done classification where the model predicts a single output class label per image.
+In semantic segmentation, the model now predicts a class for **every pixel** in the image.
+For this task in particular, we'll be predicting if a pixel is part of the left/right boundary of the race-track or background for a total of 3 classes (thought experiment: think about why the boundary is more useful than predicting binary road or not for driving).
+
+### Dataset
+
+We'll use the [SuperTuxKart Drive Dataset](https://www.cs.utexas.edu/~bzhou/dl_class/drive_data.zip), which contains pairs of images `(3, 96, 128)`, depth `(96, 128)` and information about the road which allows us to create road segmentation masks `(96, 128)`.
+The segmentation mask consists of labels in `{0, 1, 2}`, corresponding to the background and 2 lane classes (left and right boundaries of the lanes) respectively.
+The depth values are real-valued numbers normalized to the range `[0, 1]`, where 0 is close and 1 is far.
+Use the `load_data` function in `datasets/drive_dataset.py` to load the dataset.
+This dataset yields a dictionary with keys `image`, `depth`, and `track` (segmentation labels).
+
+### Model
+
+Implement the `Detector` model in `models.py`.
+Your `forward` function receives a `(B, 3, 96, 128)` image tensor as an input and should return both:
+- `(B, 3, 96, 128)` logits for the 3 classes
+- `(B, 96, 128)` tensor of depths.
+
+Use a series of convolutions to gradually reduce the spatial dimensions of the input while increasing the number of channels, then use up-convolutions `(torch.nn.Conv2dTranspose)` to recover the original spatial dimensions.
+Here's an example of how the intermediate layer outputs shapes would look like:
+```
+Input   (b,  3,     h,     w)    input image
+Down1   (b, 16, h / 2, w / 2)    after strided conv layer
+Down2   (b, 32, h / 4, h / 4)    after strided conv layer
+Up1     (b, 16, h / 2, w / 2)    after up-conv layer
+Up2     (b, 16,     h,     w)    after up-conv layer
+Logits  (b,  n,     h,     w)    output logits, where n = num_class
+Depth   (b,  1,     h,     w)    output depth, single channel
+```
+
+Additionally, the model should be able to handle arbitrary input resolutions and produce an output of the same shape as the input by using appropriate padding and striding.
+
+To supervise the model, you will need to use two loss functions:
+- Cross-entropy loss for the segmentation task
+- Regression loss (e.g., absolute error, squared error) for the depth prediction task
+Use a combination of the two losses to train the model.
+
+### Evaluation
+
+Most of the segmentation mask will belong to the background class, making it is easy to achieve a high accuracy by predicting only background.
+In this task, we will additionally evaluate the model using the mean Intersection over Union (mIoU) metric, which helps to account for the class imbalance (see the provided `ConfusionMatrix` class in `metrics.py`).
+
+$$IoU = \frac{\text{true positives}}{\text{true positives} + \text{false positives} + \text{false negatives}}$$
+
+For depth prediction, we will use the mean absolute error (MAE) metric as well as MAE computed for the lane boundary pixels only.
+
+The grading cutoffs for this section are:
+- Segmentation IOU > 0.75
+- Depth Error < 0.05
+- Depth Error for lane boundaries < 0.05
+
+### Hints/Tips
+- Use a single model to process the image features, then branch out to separate heads for segmentation and depth prediction.
+- Start with the simplest model, then gradually increase the complexity.
+- If you are getting IOU < 0.4, it is highly likely your segmentation head is simply predicting only the background class and not learning anything!
+- Build your network as a set of composable blocks (one for down convolution and one for up convolution).
+- Adding residual connections between the down blocks and the up blocks (skip connections as in [U-Net](https://en.wikipedia.org/wiki/U-Net)) are particularly useful in segmentation to help recover fine boundary details.
+- Print the shapes and min/max of your tensors! Are they what you expect?
+- For depth prediction, try both unconstrained regression and using an activation function that scales your model output to (0,1).
 
 ## Submission
 
-Once you finished the assignment, create a submission bundle using
+Create a submission bundle (max size **40MB**) using:
 ```bash
 python3 bundle.py homework [YOUR UT ID]
 ```
-and submit the zip file on canvas. Please note that the maximum file size our grader accepts is **40MB**. Please keep your model compact.
 
-Please double-check that your zip file was properly created, by grading it again
+Please double-check that your zip file was properly created by grading it again.
 ```bash
 python3 -m grader [YOUR UT ID].zip
 ```
+After verifying that the zip file grades successfully, you can submit it on Canvas.
